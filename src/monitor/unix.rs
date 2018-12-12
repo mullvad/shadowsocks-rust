@@ -8,22 +8,6 @@ use tokio_io::IoFuture;
 pub fn create_signal_monitor() -> impl Future<Item = (), Error = io::Error> + Send {
     use tokio_signal::unix::Signal;
 
-    // Monitor SIGCHLD, triggered if subprocess (plugin) is exited.
-    let fut1 = Signal::new(libc::SIGCHLD)
-        .and_then(|signal| {
-            signal
-                .take(1)
-                .for_each(|_| -> Result<(), io::Error> {
-                    error!("Plugin exited unexpectly (SIGCHLD)");
-                    Ok(())
-                })
-                .map(|_| libc::SIGCHLD)
-        })
-        .map_err(|err| {
-            error!("Failed to monitor SIGCHLD, err: {:?}", err);
-            err
-        });
-
     // Monitor SIGTERM, triggered if shadowsocks is exited gracefully. (Kill by user).
     let fut2 = Signal::new(libc::SIGTERM)
         .and_then(|sigterm| {
@@ -57,7 +41,7 @@ pub fn create_signal_monitor() -> impl Future<Item = (), Error = io::Error> + Se
         });
 
     // Wait for any of the futures to complete.
-    future::future::select_all(vec![boxed_future(fut1), boxed_future(fut2), boxed_future(fut3)]).then(|res| match res {
+    fut1.select(fut2).then(|res| match res {
         Ok(..) => Ok(()),
         Err((err, ..)) => Err(err),
     })

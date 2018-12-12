@@ -6,7 +6,7 @@ use futures::{stream::futures_unordered, Future, Stream};
 
 use super::dns_resolver::set_dns_config;
 use config::Config;
-use plugin::{launch_plugin, PluginMode};
+use plugin::{launch_plugin, monitor::create_plugin_monitor, PluginMode};
 use relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp};
 
 /// Relay server running on server side.
@@ -56,8 +56,8 @@ pub fn run(
         vf.push(boxed_future(udp_fut));
     }
 
-    // Hold it here, kill all plugins when `tokio::run` is finished
     let plugins = launch_plugin(&mut config, PluginMode::Server).expect("Failed to launch plugins");
+    vf.push(boxed_future(create_plugin_monitor(plugins)));
 
     // Recreate shared config here
     let config = Arc::new(config);
@@ -66,7 +66,6 @@ pub fn run(
     vf.push(boxed_future(tcp_fut));
 
     futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
-        drop(plugins);
         match res {
             Ok(..) => Ok(()),
             Err((err, ..)) => Err(err),
