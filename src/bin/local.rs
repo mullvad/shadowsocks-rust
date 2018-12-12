@@ -25,7 +25,7 @@ use futures::Future;
 use log::{LevelFilter, Record};
 use tokio::runtime::Runtime;
 
-use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, ServerAddr, ServerConfig};
+use shadowsocks::{monitor, plugin::PluginConfig, run_local, Config, ConfigType, ServerAddr, ServerConfig};
 
 fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
@@ -270,9 +270,11 @@ fn main() {
 
     let mut runtime = Runtime::new().expect("Creating runtime");
 
-    let result = runtime.block_on(run_local(config));
+    let result = runtime.block_on(run_local(config, monitor::create_signal_monitor()));
 
     runtime.shutdown_now().wait().unwrap();
 
-    panic!("Server exited unexpectly with result: {:?}", result);
+    if let Err(err) = result {
+        println!("Server exited unexpectedly with result: {:?}", err);
+    }
 }

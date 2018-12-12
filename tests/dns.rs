@@ -8,6 +8,7 @@ extern crate log;
 
 use std::{
     collections::HashSet,
+    io,
     net::{SocketAddr, UdpSocket},
     thread,
     time::Duration,
@@ -41,7 +42,8 @@ fn dns_relay() {
 
     thread::spawn(move || {
         let mut runtime = Runtime::new().expect("Failed to create Runtime");
-        runtime.block_on(run_server(server_cfg)).unwrap();
+        let noop_signal_monitor = futures::empty::<(), io::Error>();
+        runtime.block_on(run_server(server_cfg, noop_signal_monitor)).unwrap();
     });
 
     thread::spawn(move || {

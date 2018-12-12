@@ -6,6 +6,7 @@ extern crate tokio;
 extern crate tokio_io;
 
 use std::{
+    io,
     net::{SocketAddr, ToSocketAddrs},
     thread,
     time::Duration,
@@ -63,14 +64,16 @@ impl Socks5TestServer {
         let svr_cfg = self.config.clone();
         thread::spawn(move || {
             let mut runtime = Runtime::new().expect("Failed to create Runtime");
-            let fut = run_server(svr_cfg);
+            let noop_signal_monitor = futures::empty::<(), io::Error>();
+            let fut = run_server(svr_cfg, noop_signal_monitor);
             runtime.block_on(fut).expect("Failed to run Server");
         });
 
         let client_cfg = self.config.clone();
         thread::spawn(move || {
             let mut runtime = Runtime::new().expect("Failed to create Runtime");
-            let fut = run_local(client_cfg);
+            let noop_signal_monitor = futures::empty::<(), io::Error>();
+            let fut = run_local(client_cfg, noop_signal_monitor);
             runtime.block_on(fut).expect("Failed to run Local");
         });
 

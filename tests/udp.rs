@@ -8,7 +8,7 @@ extern crate tokio;
 extern crate tokio_io;
 
 use std::{
-    io::Cursor,
+    io::{self, Cursor},
     net::SocketAddr,
     sync::{Arc, Barrier},
     thread,
@@ -59,8 +59,8 @@ fn get_client_addr() -> SocketAddr {
 fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
         let mut runtime = Runtime::new().expect("Failed to create Runtime");
-
-        let fut = run_server(get_config());
+        let noop_signal_monitor = futures::empty::<(), io::Error>();
+        let fut = run_server(get_config(), noop_signal_monitor);
         bar.wait();
         runtime.block_on(fut).expect("Failed to run Server");
     });
@@ -69,8 +69,8 @@ fn start_server(bar: Arc<Barrier>) {
 fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
         let mut runtime = Runtime::new().expect("Failed to create Runtime");
-
-        let fut = run_local(get_config());
+        let noop_signal_monitor = futures::empty::<(), io::Error>();
+        let fut = run_local(get_config(), noop_signal_monitor);
         bar.wait();
         runtime.block_on(fut).expect("Failed to run Local");
     });
