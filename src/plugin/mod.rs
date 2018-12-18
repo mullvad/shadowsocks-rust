@@ -21,6 +21,7 @@ use subprocess::{Popen, Result as PopenResult};
 
 use config::{Config, ServerAddr};
 
+pub mod monitor;
 mod obfs_proxy;
 mod ss_plugin;
 
