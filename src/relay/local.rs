@@ -1,12 +1,23 @@
 //! Local side
 
-use std::{io, sync::Arc};
+use std::{
+    io,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
-use futures::{stream::futures_unordered, Future, Stream};
+use futures::{
+    future::{self, Either},
+    stream::futures_unordered,
+    Future,
+    Stream,
+};
 
 use super::dns_resolver::set_dns_config;
 use config::Config;
-use plugin::{launch_plugin, PluginMode};
+use plugin::{launch_plugin, monitor::create_plugin_monitor, PluginMode};
 use relay::{boxed_future, tcprelay::local::run as run_tcp, udprelay::local::run as run_udp};
 
 /// Relay server running under local environment.
@@ -58,17 +69,28 @@ pub fn run(
 
     let plugins = launch_plugin(&mut config, PluginMode::Client).expect("Failed to launch plugins");
 
+    let abort_signal = Arc::new(AtomicBool::new(false));
+    let plugin_monitor = create_plugin_monitor(plugins, abort_signal.clone());
+
     // Recreate shared config here
     let config = Arc::new(config);
 
     let tcp_fut = run_tcp(config.clone());
     vf.push(boxed_future(tcp_fut));
 
-    futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
-        drop(plugins);
-        match res {
-            Ok(..) => Ok(()),
-            Err((err, ..)) => Err(err),
-        }
-    })
+    futures_unordered(vf)
+        .into_future()
+        .select2(plugin_monitor)
+        .then(move |res| match res {
+            // future other than `plugin_monitor` has resolved
+            Ok(Either::A((_, plugin_monitor))) | Err(Either::A((_, plugin_monitor))) => {
+                abort_signal.store(true, Ordering::Relaxed);
+                boxed_future(plugin_monitor)
+            }
+            // `plugin_monitor` has resolved
+            _ => boxed_future(future::err(io::Error::new(
+                io::ErrorKind::Other,
+                "Plugin monitor aborted",
+            ))),
+        })
 }
