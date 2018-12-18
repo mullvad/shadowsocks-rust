@@ -61,7 +61,7 @@ impl Drop for Plugin {
 }
 
 /// Launch plugins in config
-pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Plugin>> {
+pub fn launch_plugins(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Plugin>> {
     let mut plugins = Vec::new();
 
     for svr in &mut config.server {

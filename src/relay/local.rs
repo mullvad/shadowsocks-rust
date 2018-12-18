@@ -17,7 +17,7 @@ use futures::{
 
 use super::dns_resolver::set_dns_config;
 use config::Config;
-use plugin::{launch_plugin, monitor::create_plugin_monitor, PluginMode};
+use plugin::{launch_plugins, monitor::create_plugin_monitor, PluginMode};
 use relay::{boxed_future, tcprelay::local::run as run_tcp, udprelay::local::run as run_udp};
 
 /// Relay server running under local environment.
@@ -62,7 +62,7 @@ pub fn run(
         vf.push(boxed_future(run_udp(Arc::new(config.clone()))));
     }
 
-    let plugins = launch_plugin(&mut config, PluginMode::Client).expect("Failed to launch plugins");
+    let plugins = launch_plugins(&mut config, PluginMode::Client).expect("Failed to launch plugins");
 
     if plugins.is_empty() {
         vf.push(boxed_future(run_tcp(Arc::new(config))));
