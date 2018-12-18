@@ -1,12 +1,23 @@
 //! Server side
 
-use std::{io, sync::Arc};
+use std::{
+    io,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
-use futures::{stream::futures_unordered, Future, Stream};
+use futures::{
+    future::{self, Either},
+    stream::futures_unordered,
+    Future,
+    Stream,
+};
 
 use super::dns_resolver::set_dns_config;
 use config::Config;
-use plugin::{launch_plugin, PluginMode};
+use plugin::{launch_plugin, monitor::create_plugin_monitor, PluginMode};
 use relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp};
 
 /// Relay server running on server side.
@@ -46,30 +57,41 @@ pub fn run(
     vf.push(boxed_future(signal_monitor));
 
     if config.enable_udp {
-        // Clone config here, because the config for TCP relay will be modified
-        // after plugins started
-        let udp_config = Arc::new(config.clone());
-
-        // Run UDP relay before starting plugins
-        // Because plugins doesn't support UDP relay
-        let udp_fut = run_udp(udp_config);
-        vf.push(boxed_future(udp_fut));
+        // UDP relay doesn't support plugins so is not dependent on them being started first.
+        // Give the relay its own copy of the config, because `launch_plugins` below will modify the config.
+        vf.push(boxed_future(run_udp(Arc::new(config.clone()))));
     }
 
-    // Hold it here, kill all plugins when `tokio::run` is finished
-    let plugins = launch_plugin(&mut config, PluginMode::Server).expect("Failed to launch plugins");
+    let plugins = launch_plugin(&mut config, PluginMode::Client).expect("Failed to launch plugins");
 
-    // Recreate shared config here
-    let config = Arc::new(config);
-
-    let tcp_fut = run_tcp(config.clone());
-    vf.push(boxed_future(tcp_fut));
-
-    futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
-        drop(plugins);
-        match res {
-            Ok(..) => Ok(()),
-            Err((err, ..)) => Err(err),
-        }
-    })
+    if plugins.is_empty() {
+        vf.push(boxed_future(run_tcp(Arc::new(config))));
+        let f = futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
+            match res {
+                Ok(..) => Ok(()),
+                Err((err, ..)) => Err(err),
+            }
+        });
+        boxed_future(f)
+    } else {
+        let abort_signal = Arc::new(AtomicBool::new(false));
+        let plugin_monitor = create_plugin_monitor(plugins, abort_signal.clone());
+        vf.push(boxed_future(run_tcp(Arc::new(config))));
+        let f = futures_unordered(vf)
+            .into_future()
+            .select2(plugin_monitor)
+            .then(move |res| match res {
+                // Future other than `plugin_monitor` has resolved.
+                Ok(Either::A((_, plugin_monitor))) | Err(Either::A((_, plugin_monitor))) => {
+                    abort_signal.store(true, Ordering::Relaxed);
+                    boxed_future(plugin_monitor)
+                }
+                // Future `plugin_monitor` has resolved.
+                _ => boxed_future(future::err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Plugin monitor aborted",
+                ))),
+            });
+        boxed_future(f)
+    }
 }
