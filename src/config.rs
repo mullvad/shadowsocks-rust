@@ -538,7 +538,7 @@ macro_rules! except {
         match $expr {
             ::std::option::Option::Some(val) => val,
             ::std::option::Option::None => {
-                return ::std::result::Result::Err($crate::config::Error::new($kind, $desc, $detail))
+                return ::std::result::Result::Err($crate::config::Error::new($kind, $desc, $detail));
             }
         }
     };
@@ -742,7 +742,7 @@ impl Config {
                                         "`local_address` is not a valid IP \
                                          address",
                                         None,
-                                    ))
+                                    ));
                                 }
                             },
                         }
