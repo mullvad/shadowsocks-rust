@@ -115,6 +115,6 @@ pub use self::{
 
 pub mod config;
 pub mod crypto;
-mod monitor;
+pub mod monitor;
 pub mod plugin;
 pub mod relay;

@@ -6,6 +6,7 @@ use futures::{stream::futures_unordered, Future, Stream};
 
 use super::dns_resolver::set_dns_config;
 use config::Config;
+use monitor::create_signal_monitor;
 use plugin::{launch_plugin, PluginMode};
 use relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp};
 
@@ -33,12 +34,21 @@ use relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::ru
 /// let fut = run(config);
 /// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err)));
 /// ```
-pub fn run(mut config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
+pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
+    run_with_monitor(config, create_signal_monitor())
+}
+
+pub fn run_with_monitor(
+    mut config: Config,
+    signal_monitor: impl Future<Item = (), Error = io::Error> + Send + 'static,
+) -> impl Future<Item = (), Error = io::Error> + Send {
     if let Some(c) = config.get_dns_config() {
         set_dns_config(c);
     }
 
     let mut vf = Vec::new();
+
+    vf.push(boxed_future(signal_monitor));
 
     if config.enable_udp {
         // Clone config here, because the config for TCP relay will be modified
@@ -53,17 +63,15 @@ pub fn run(mut config: Config) -> impl Future<Item = (), Error = io::Error> + Se
 
     // Hold it here, kill all plugins when `tokio::run` is finished
     let plugins = launch_plugin(&mut config, PluginMode::Server).expect("Failed to launch plugins");
-    let mon = ::monitor::monitor_signal(plugins);
 
     // Recreate shared config here
     let config = Arc::new(config);
 
     let tcp_fut = run_tcp(config.clone());
-
-    vf.push(boxed_future(mon));
     vf.push(boxed_future(tcp_fut));
 
     futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
+        drop(plugins);
         match res {
             Ok(..) => Ok(()),
             Err((err, ..)) => Err(err),
