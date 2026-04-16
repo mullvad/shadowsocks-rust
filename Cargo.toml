@@ -47,6 +47,11 @@ required-features = ["winservice"]
 [workspace]
 members = ["crates/shadowsocks", "crates/shadowsocks-service"]
 
+# TODO: Remove this and bump shadowsocks-crypto to whatever version contains the ring -> aws-lc-rs
+# migration before merging this!
+[patch.crates-io]
+shadowsocks-crypto = { git = "https://github.com/mullvad/shadowsocks-crypto", branch = "replace-ring-with-aws-lc-rs" }
+
 [profile.release]
 lto = "fat"
 codegen-units = 1

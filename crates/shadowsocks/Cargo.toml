@@ -26,10 +26,16 @@ trust-dns = ["hickory-dns"]
 # WARN: Stream Cipher Protocol is proved to be insecure
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
-stream-cipher = ["shadowsocks-crypto/v1-stream", "shadowsocks-crypto/ring"]
+stream-cipher = [
+    "shadowsocks-crypto/v1-stream",
+    "shadowsocks-crypto/faster-crypto",
+]
 
 # Enable AEAD ciphers
-aead-cipher = ["shadowsocks-crypto/v1-aead", "shadowsocks-crypto/ring"]
+aead-cipher = [
+    "shadowsocks-crypto/v1-aead",
+    "shadowsocks-crypto/faster-crypto",
+]
 
 # Enable extra AEAD ciphers
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
@@ -37,7 +43,7 @@ aead-cipher-extra = ["aead-cipher", "shadowsocks-crypto/v1-aead-extra"]
 
 aead-cipher-2022 = [
     "shadowsocks-crypto/v2",
-    "shadowsocks-crypto/ring",
+    "shadowsocks-crypto/faster-crypto",
     "rand",
     "aes",
     "lru_time_cache",
